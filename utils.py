@@ -175,6 +175,19 @@ def data_generator(x_train, y_train, batch_size=4, crop_size=129, mode='base'):
 
         yield x_batch, y_batch
 
+def resize(filename, r=3):
+    # image reszie
+    img = cv2.imread(filename)
+    rows, cols = img.shape[:2]
+    img = cv2.resize(img, dsize=(cols//r, rows//r))
+    # image crop 
+    rows, cols = img.shape[:2]
+    rows = rows - (rows - 1) % 4
+    cols = cols - (cols - 1) % 4
+    img = img[:rows, :cols,:]
+    return img.astype('float32')/255.0
+
+
 if __name__=='__main__':
     import time     
     x_data, y_data = load_dataset_sice('D:\\projects\\_datasets\\SICE\\Dataset_Part1')
