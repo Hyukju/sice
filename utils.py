@@ -1,9 +1,41 @@
 import os
-from tkinter.tix import Tree
 import cv2 
 import numpy as np 
 import random
 import threading
+import matplotlib.pyplot as plt 
+
+
+def write_history(history):
+    with open('history.txt', 'w') as f:
+        for line in history:
+            m = ','.join(line) + '\n'
+            f.write(m)
+
+def read_history(history):
+    train_loss = []
+    valid_loss = []
+    with open(history, 'r') as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines):
+            if i > 0:
+                m = line.split(',')                
+                train_loss.append(float(m[1]))
+                valid_loss.append(float(m[2]))
+    return train_loss, valid_loss
+
+def draw_chart(history):
+    train_loss, valid_loss = read_history(history=history)
+
+    x = range(1, len(train_loss)+1)
+
+    plt.plot(x, train_loss)
+    plt.plot(x, valid_loss)
+    plt.title('Training Loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'])
+    plt.show()
 
 
 ## load data
