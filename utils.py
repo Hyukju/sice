@@ -6,8 +6,8 @@ import threading
 import matplotlib.pyplot as plt 
 
 
-def write_history(history):
-    with open('history.txt', 'w') as f:
+def write_history(history, save_file):
+    with open(save_file, 'w') as f:
         for line in history:
             m = ','.join(line) + '\n'
             f.write(m)
