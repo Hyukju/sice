@@ -175,6 +175,41 @@ def data_generator(x_train, y_train, batch_size=4, crop_size=129, mode='base'):
 
         yield x_batch, y_batch
 
+def datagenerator(dir, batch_size):
+    file_list = os.listdir(dir)
+    total = len(file_list)
+
+    print('number of data = ', total)
+    
+    idx = 0
+    while True:
+        if idx == 0:
+            random.shuffle(file_list)
+
+        start = idx * batch_size
+        end = min(total, start + batch_size)
+        
+        bz = end - start 
+
+        x_set = np.zeros((bz, 129, 129, 3), dtype='float32')
+        y_set = np.zeros((bz, 129, 129, 3), dtype='float32')
+
+        for i in range(start, end):
+            filename = file_list[i]
+            img = cv2.imread(os.path.join(dir, filename))
+            input = img[:,:129,:]
+            label = img[:,129:,:]
+            
+            x_set[i - start,...] = input.astype('float32')/255
+            y_set[i - start,...] = label.astype('float32')/255
+        
+        if end == total:
+            idx = 0
+        else:
+            idx += 1
+
+        yield x_set, y_set
+
 def resize(filename, r=3):
     # image reszie
     img = cv2.imread(filename)
