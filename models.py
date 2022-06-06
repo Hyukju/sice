@@ -1,6 +1,6 @@
 import tensorflow as tf 
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Conv2D, Conv2DTranspose, BatchNormalization, PReLU, add
+from tensorflow.keras.layers import Input, Conv2D, Conv2DTranspose, BatchNormalization, PReLU, add, ReLU
 from tensorflow.keras.optimizers import Adam
 
 ## loss functions
@@ -16,18 +16,21 @@ def mse_loss(y_true, y_pred):
 ## convolution layers
 def conv_prelu(x, filters, kernel_size, padding='valid', strides=1):
     x = Conv2D(filters=filters, kernel_size=kernel_size, padding=padding, strides=strides)(x)
-    x = PReLU()(x)
+    # shared_axes=[1,2] 가 있어야 input_shape(None, None,3) 동작함
+    x = PReLU(shared_axes=[1,2])(x) 
     return x 
 
 def deconv_prelu(x, filters, kernel_size, padding='valid', strides=1):
     x = Conv2DTranspose(filters=filters, kernel_size=kernel_size, padding=padding, strides=strides)(x)
-    x = PReLU()(x)
+    # shared_axes=[1,2] 가 있어야 input_shape(None, None,3) 동작함
+    x = PReLU(shared_axes=[1,2])(x)
     return x 
 
-def conv_prelu_bn(x, filters, kernel_size, padding='valid', strides=1):
+def conv_bn_prelu(x, filters, kernel_size, padding='valid', strides=1):
     x = Conv2D(filters=filters, kernel_size=kernel_size, padding=padding, strides=strides)(x)       
     x = BatchNormalization()(x)
-    x = PReLU()(x)
+    # shared_axes=[1,2] 가 있어야 input_shape(None, None,3) 동작함
+    x = PReLU(shared_axes=[1,2])(x)
     return x 
 
 def conv_output(x):
@@ -41,9 +44,9 @@ class SICE():
   
     def direct_network(self):
         input = Input(shape=(self.width, self.height, 3))
-        x = conv_prelu_bn(input, filters=64, kernel_size=(3,3), padding='same', strides=1)
+        x = conv_bn_prelu(input, filters=64, kernel_size=(3,3), padding='same', strides=1)
         for _ in range(13):
-            x = conv_prelu_bn(x, filters=64, kernel_size=(3,3), padding='same', strides=1)
+            x = conv_bn_prelu(x, filters=64, kernel_size=(3,3), padding='same', strides=1)
         output = conv_output(x)
         return Model(input, output)
 
@@ -75,9 +78,9 @@ class SICE():
         input = Input(shape=(self.width, self.height, 3))
         for i in range(6):
             if i == 0:
-                x = conv_prelu_bn(input, filters=64, kernel_size=(3,3), padding='same', strides=1)
+                x = conv_bn_prelu(input, filters=64, kernel_size=(3,3), padding='same', strides=1)
             else:            
-                x = conv_prelu_bn(x, filters=64, kernel_size=(3,3), padding='same', strides=1)
+                x = conv_bn_prelu(x, filters=64, kernel_size=(3,3), padding='same', strides=1)
         x = conv_output(x)
         output = add([input, x])
         return Model(input, output)
