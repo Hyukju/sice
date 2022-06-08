@@ -12,9 +12,11 @@ def write_history(history, save_file):
             m = ','.join(line) + '\n'
             f.write(m)
 
-def read_history(history):
+def read_history(history):    
     train_loss = []
     valid_loss = []
+    learning_rate = []
+    
     with open(history, 'r') as f:
         lines = f.readlines()
         for i, line in enumerate(lines):
@@ -22,10 +24,11 @@ def read_history(history):
                 m = line.split(',')                
                 train_loss.append(float(m[1]))
                 valid_loss.append(float(m[2]))
-    return train_loss, valid_loss
+                learning_rate.append(float(m[3]))
+    return train_loss, valid_loss, learning_rate
 
 def draw_chart(history):
-    train_loss, valid_loss = read_history(history=history)
+    train_loss, valid_loss, learning_rate = read_history(history=history)
 
     x = range(1, len(train_loss)+1)
 
@@ -175,12 +178,10 @@ def data_generator(x_train, y_train, batch_size=4, crop_size=129, mode='base'):
 
         yield x_batch, y_batch
 
-def datagenerator(dir, batch_size):
+def datagenerator(dir, batch_size, img_size=129):
     file_list = os.listdir(dir)
     total = len(file_list)
 
-    print('number of data = ', total)
-    
     idx = 0
     while True:
         if idx == 0:
@@ -191,14 +192,14 @@ def datagenerator(dir, batch_size):
         
         bz = end - start 
 
-        x_set = np.zeros((bz, 129, 129, 3), dtype='float32')
-        y_set = np.zeros((bz, 129, 129, 3), dtype='float32')
+        x_set = np.zeros((bz, img_size, img_size, 3), dtype='float32')
+        y_set = np.zeros((bz, img_size, img_size, 3), dtype='float32')
 
-        for i in range(start, end):
+        for i in range(start, end):            
             filename = file_list[i]
-            img = cv2.imread(os.path.join(dir, filename))
-            input = img[:,:129,:]
-            label = img[:,129:,:]
+            img = cv2.imread(os.path.join(dir, filename))            
+            input = img[:,:img_size,:]
+            label = img[:,img_size:,:]
             
             x_set[i - start,...] = input.astype('float32')/255
             y_set[i - start,...] = label.astype('float32')/255
@@ -214,7 +215,7 @@ def resize(filename, r=3):
     # image reszie
     img = cv2.imread(filename)
     rows, cols = img.shape[:2]
-    img = cv2.resize(img, dsize=(cols//r, rows//r))
+    img = cv2.resize(img, dsize=(cols//r, rows//r), interpolation=cv2.INTER_CUBIC)
     # image crop 
     rows, cols = img.shape[:2]
     rows = rows - (rows - 1) % 4

@@ -2,11 +2,11 @@ import os
 import cv2 
 import numpy as np 
 from models import SICE, mse_loss
-from utils import load_dataset_sice, split_train_valid, data_generator, write_history, resize
+from utils import load_dataset_sice, split_train_valid, data_generator, write_history, resize, read_history
 from utils import datagenerator
 from tensorflow.keras.optimizers import SGD
 import tensorflow.keras.backend as K
-
+import tensorflow as tf
 
 def luminanace_train(dataset_dir, batch_size, epochs, weight_dir):
     model = SICE()
@@ -23,25 +23,49 @@ def luminanace_train(dataset_dir, batch_size, epochs, weight_dir):
     train(train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir)
 
 
-def direct_train(epochs, batch_size, weight_dir):
-    model = SICE()
-    network = model.direct_network()
-    network.summary() 
-    network.compile(optimizer=SGD(learning_rate=0.1, momentum=0.9), loss=mse_loss)
-    train_datagen = datagenerator('./dataset/train', batch_size)
-    valid_datagen = datagenerator('./dataset/valid', batch_size)
+def direct_train(epochs, train_data_dir, valid_data_dir, batch_size, weight_dir, gpu_id=0, last_weight_file=None):
+    with tf.device(f'/device:GPU:{gpu_id}'):
+        model = SICE()   
+        network = model.direct_network()
+        network.summary() 
+        network.compile(optimizer=SGD(learning_rate=0.1, momentum=0.9), loss=mse_loss)
+        train_datagen = datagenerator(train_data_dir, batch_size, img_size=320)
+        valid_datagen = datagenerator(valid_data_dir, batch_size, img_size=320)
 
-    steps_per_epoch = 21
-    valid_steps = 45
-    train(train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir)
+        num_train_imgs = len(os.listdir(train_data_dir))
+        num_valid_imgs = len(os.listdir(valid_data_dir))
+        steps_per_epoch = num_train_imgs // batch_size
+        valid_steps = num_valid_imgs // batch_size
+        print('number train images:', num_train_imgs)
+        print('number valid images:', num_train_imgs)
+        print('steps per epoch:', steps_per_epoch)
+        print('valid steps: ', valid_steps)
+        train(network, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir, last_weight_file=last_weight_file)
 
 
-def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir, decay=0.0001):
+def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir, decay=0.0001, last_weight_file=None):
+    
+    os.makedirs(weight_dir, exist_ok=True)
     
     history = [['epochs', 'train loss', 'valid loss', 'learning rate']]
-    last_weight_file = ''
+    if last_weight_file == None:
+        lr = 0.1     
+        last_weight_file = ''
+        min_valid_loss = 10000
+        start_epoch = 0
+    else:
+        # read history:
+        model.load_weights(os.path.join(weight_dir, last_weight_file))
+        last_epoch = int(last_weight_file.split('_')[1]) 
+        train_loss, valid_loss, learning_rate = read_history(os.path.join(weight_dir, 'history.txt'))   
+        for i in range(last_epoch):
+            history.append([str(i), str(train_loss[i]), str(valid_loss[i]), str(learning_rate[i])])        
+        lr = learning_rate[last_epoch]
+        min_valid_loss = valid_loss[last_epoch]
+        start_epoch = last_epoch + 1        
+        print(f'last epoch: {last_epoch}, min_valid_loss: {min_valid_loss}, learning_rate: {lr}')
 
-    for epoch in range(epochs):    
+    for epoch in range(start_epoch, epochs):    
         # 30 epoch 마다 1/10로 줄임 
         if epoch > 0 and epoch % 30 == 0:
             lr = lr/10.
@@ -69,14 +93,6 @@ def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_st
         m_valid_loss = m_valid_loss/valid_steps
         print(f'epoch {epoch}/{epochs} : loss = {m_train_loss:.4f}, valid loss = {m_valid_loss:.4f}')
 
-        # history 
-        history.append([str(epoch), 
-                        str(f'{m_train_loss:.4f}'), 
-                        str(f'{m_valid_loss:.4f}'), 
-                        str(K.get_value(model.optimizer.learning_rate))])
-        history_save_file = os.path.join(weight_dir, 'history.txt')             
-        write_history(history, history_save_file)
-
         # best weight 
         if m_valid_loss < min_valid_loss:
             min_valid_loss = m_valid_loss
@@ -84,10 +100,10 @@ def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_st
             model.save_weights(os.path.join(weight_dir, weight_file))
             
             # test image using best weigths
-            img = resize('dataset\\Dataset_Part1\\68\\2.JPG', r=3)
-            label = resize('dataset\\Dataset_Part1\\Label\\68.JPG', r=3)        
+            img = resize('D:\\projects\\_datasets\\SICE\\Dataset_Part1\\68\\3.JPG', r=1)
+            label = resize('D:\\projects\\_datasets\\SICE\\Dataset_Part1\\Label\\68.JPG', r=1)        
             predict = model.predict(np.expand_dims(img, axis=0))
-            cv2.imwrite(os.path.joing(weight_dir, f'{epoch}.png'), np.hstack([img * 255, label*255, predict[0]*255]))
+            cv2.imwrite(os.path.join(weight_dir, f'{epoch}.png'), np.hstack([img * 255, label*255, predict[0]*255]))
                 
         # last weight    
         # 이전의 weight 삭제 
@@ -97,68 +113,26 @@ def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_st
         last_weight_file = os.path.join(weight_dir, f'model_{epoch}_last.h5')        
         model.save_weights(last_weight_file)
 
+        # history 
+        history.append([str(epoch), 
+                        str(f'{m_train_loss:.7f}'), 
+                        str(f'{m_valid_loss:.7f}'), 
+                        str(K.get_value(model.optimizer.learning_rate))])
+        history_save_file = os.path.join(weight_dir, 'history.txt')             
+        write_history(history, history_save_file)
     print('finished!!')
 
-def load_test_image(filename):
-    img = cv2.imread(filename)
-    rows, cols = img.shape[:2]
-    img = cv2.resize(img, dsize=(cols//3, rows//3))
-    # 네트워크 구조 상 아래 형태의 크기를 가짐 
-    rows, cols = img.shape[:2]
-    rows = rows - (rows -1) % 4
-    cols = cols - (cols -1) % 4
-    img = img[:rows, :cols,:]
-    return img.astype('float32')/255.0
-
-def detail_train():
-    pass 
-
-def whole_train():
-    pass 
-
-def test():
-    import cv2
-    import numpy as np  
-    model = SICE()       
-    l_network = model.luminance_enhancement_network()
-    l_network.load_weights('./weights/luminance_0146_0.03.h5')
-    img = cv2.imread('D:\\projects\\_datasets\\SICE\\Dataset_Part1\\2\\3.jpg')
-    img = img.astype('float32')/255.0
-    rows, cols = img.shape[:2]
-    rows_r = rows//129
-    cols_r = cols//129
-    imgs = [] 
-    for y in range(rows_r):
-        for x in range(cols_r):
-            imgs.append(img[y*129:y*129+129,x*129:x*129+129,:])       
-    predicted_imgs = l_network.predict(np.array(imgs))
-
-def test2():
-    import cv2
-    import numpy as np  
-    from utils import get_base_image
-    model = SICE()       
-    l_network = model.luminance_enhancement_network()
-    l_network.load_weights('./weights/luminance_0146_0.03.h5')
-    img = cv2.imread('D:\\projects\\_datasets\\SICE\\Dataset_Part1\\1\\1.jpg')
-    img = cv2.resize(img,dsize=(129,129))
-    rows, cols = img.shape[:2]
-
-    img = cv2.resize(img, dsize=(cols//3, rows//3))
-    rows, cols = img.shape[:2]
-    rows = (rows - 17)//4 * 4 + 17
-    cols = (cols - 17)//4 * 4 + 17
-    img = img[:rows, :cols,:]
-   
-    img = get_base_image(img)
-       
-    predicted_imgs = l_network.predict(np.expand_dims(img, axis=0))
-
-
-    cv2.imwrite('p.png',predicted_imgs[0]*255)
-    cv2.imwrite('i.png',img*255)
-
-
 if __name__=='__main__':
-    direct_train(100, 40, 'weights')
+    epoch = 300
+    batch_size = 15
+    train_data_dir = './dataset/train_6'
+    valid_data_dir = './dataset/valid_6'
+    weight_dir = './weights/train_6'
+
+    direct_train(epoch=epoch, batch_size=batch_size,
+                train_data_dir=train_data_dir,
+                valid_data_dir=valid_data_dir, 
+                weight_dir=weight_dir, 
+                gpu_id=1, 
+                last_weight_file=None)
    
