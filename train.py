@@ -42,7 +42,6 @@ def direct_train(epochs, train_data_dir, valid_data_dir, batch_size, weight_dir,
         print('valid steps: ', valid_steps)
         train(network, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir, last_weight_file=last_weight_file)
 
-
 def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_steps, weight_dir, decay=0.0001, last_weight_file=None):
     
     os.makedirs(weight_dir, exist_ok=True)
@@ -55,10 +54,11 @@ def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_st
         start_epoch = 0
     else:
         # read history:
-        model.load_weights(os.path.join(weight_dir, last_weight_file))
         last_epoch = int(last_weight_file.split('_')[1]) 
+        last_weight_file = os.path.join(weight_dir, last_weight_file)
+        model.load_weights(last_weight_file)
         train_loss, valid_loss, learning_rate = read_history(os.path.join(weight_dir, 'history.txt'))   
-        for i in range(last_epoch):
+        for i in range(last_epoch + 1):
             history.append([str(i), str(train_loss[i]), str(valid_loss[i]), str(learning_rate[i])])        
         lr = learning_rate[last_epoch]
         min_valid_loss = valid_loss[last_epoch]
@@ -89,7 +89,7 @@ def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_st
         m_valid_loss = 0
         for _ in range(valid_steps):
             valid_data = next(valid_datagen)
-            m_valid_loss += model.train_on_batch(valid_data[0], valid_data[1])
+            m_valid_loss += model.evaluate(valid_data[0], valid_data[1])
         m_valid_loss = m_valid_loss/valid_steps
         print(f'epoch {epoch}/{epochs} : loss = {m_train_loss:.4f}, valid loss = {m_valid_loss:.4f}')
 
@@ -123,16 +123,16 @@ def train(model, train_datagen, valid_datagen, epochs, steps_per_epoch, valid_st
     print('finished!!')
 
 if __name__=='__main__':
-    epoch = 300
-    batch_size = 15
-    train_data_dir = './dataset/train_6'
-    valid_data_dir = './dataset/valid_6'
-    weight_dir = './weights/train_6'
-
-    direct_train(epoch=epoch, batch_size=batch_size,
+    epochs = 300
+    batch_size = 10
+    train_data_dir = './dataset/train_5_2'
+    valid_data_dir = './dataset/valid_5_2'
+    weight_dir = './weights/train_5_2_4'
+    last_weight_file = None
+    direct_train(epochs=epochs, batch_size=batch_size,
                 train_data_dir=train_data_dir,
                 valid_data_dir=valid_data_dir, 
                 weight_dir=weight_dir, 
                 gpu_id=1, 
-                last_weight_file=None)
+                last_weight_file=last_weight_file)
    
